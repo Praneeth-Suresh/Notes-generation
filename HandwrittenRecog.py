@@ -1,51 +1,5 @@
-"""
-Title: Handwriting recognition
-Authors: [A_K_Nain](https://twitter.com/A_K_Nain), [Sayak Paul](https://twitter.com/RisingSayak)
-Date created: 2021/08/16
-Last modified: 2023/07/06
-Description: Training a handwriting recognition model with variable-length sequences.
-Accelerator: GPU
-"""
-"""
-## Introduction
-
-This example shows how the [Captcha OCR](https://keras.io/examples/vision/captcha_ocr/)
-example can be extended to the
-[IAM Dataset](https://fki.tic.heia-fr.ch/databases/iam-handwriting-database),
-which has variable length ground-truth targets. Each sample in the dataset is an image of some
-handwritten text, and its corresponding target is the string present in the image.
-The IAM Dataset is widely used across many OCR benchmarks, so we hope this example can serve as a
-good starting point for building OCR systems.
-"""
-
-"""
-## Data collection
-"""
-
-"""shell
-wget -q https://github.com/sayakpaul/Handwriting-Recognizer-in-Keras/releases/download/v1.0.0/IAM_Words.zip
-unzip -qq IAM_Words.zip
-
-mkdir data
-mkdir data/words
-tar -xf IAM_Words/words.tgz -C data/words
-mv IAM_Words/words.txt data
-"""
-
-"""
-Preview how the dataset is organized. Lines prepended by "#" are just metadata information.
-"""
-
-"""shell
-head -20 data/words.txt
-"""
-
-"""
-## Imports
-"""
-
-from tensorflow import keras
 from tensorflow.keras.layers import StringLookup
+from tensorflow import keras
 
 import matplotlib.pyplot as plt
 import tensorflow as tf
@@ -54,10 +8,6 @@ import os
 
 np.random.seed(42)
 tf.random.set_seed(42)
-
-"""
-## Dataset splitting
-"""
 
 base_path = "data"
 words_list = []
@@ -73,9 +23,7 @@ len(words_list)
 
 np.random.shuffle(words_list)
 
-"""
-We will split the dataset into three subsets with a 90:5:5 ratio (train:validation:test).
-"""
+# We will split the dataset into three subsets with a 90:5:5 ratio (train:validation:test).
 
 split_idx = int(0.9 * len(words_list))
 train_samples = words_list[:split_idx]
@@ -93,11 +41,7 @@ print(f"Total training samples: {len(train_samples)}")
 print(f"Total validation samples: {len(validation_samples)}")
 print(f"Total test samples: {len(test_samples)}")
 
-"""
-## Data input pipeline
-
-We start building our data input pipeline by first preparing the image paths.
-"""
+# BUild the data input pipeline
 
 base_image_path = os.path.join(base_path, "words")
 
@@ -105,7 +49,7 @@ base_image_path = os.path.join(base_path, "words")
 def get_image_paths_and_labels(samples):
     paths = []
     corrected_samples = []
-    for i, file_line in enumerate(samples):
+    for (i, file_line) in enumerate(samples):
         line_split = file_line.strip()
         line_split = line_split.split(" ")
 
@@ -128,10 +72,6 @@ train_img_paths, train_labels = get_image_paths_and_labels(train_samples)
 validation_img_paths, validation_labels = get_image_paths_and_labels(validation_samples)
 test_img_paths, test_labels = get_image_paths_and_labels(test_samples)
 
-"""
-Then we prepare the ground-truth labels.
-"""
-
 # Find maximum length and the size of the vocabulary in the training data.
 train_labels_cleaned = []
 characters = set()
@@ -153,11 +93,6 @@ print("Vocab size: ", len(characters))
 # Check some label samples.
 train_labels_cleaned[:10]
 
-"""
-Now we clean the validation and the test labels as well.
-"""
-
-
 def clean_labels(labels):
     cleaned_labels = []
     for label in labels:
@@ -169,19 +104,6 @@ def clean_labels(labels):
 validation_labels_cleaned = clean_labels(validation_labels)
 test_labels_cleaned = clean_labels(test_labels)
 
-"""
-### Building the character vocabulary
-
-Keras provides different preprocessing layers to deal with different modalities of data.
-[This guide](https://keras.io/guides/preprocessing_layers/) provides a comprehensive introduction.
-Our example involves preprocessing labels at the character
-level. This means that if there are two labels, e.g. "cat" and "dog", then our character
-vocabulary should be {a, c, d, g, o, t} (without any special tokens). We use the
-[`StringLookup`](https://keras.io/api/layers/preprocessing_layers/categorical/string_lookup/)
-layer for this purpose.
-"""
-
-
 AUTOTUNE = tf.data.AUTOTUNE
 
 # Mapping characters to integers.
@@ -192,20 +114,7 @@ num_to_char = StringLookup(
     vocabulary=char_to_num.get_vocabulary(), mask_token=None, invert=True
 )
 
-"""
-### Resizing images without distortion
-
-Instead of square images, many OCR models work with rectangular images. This will become
-clearer in a moment when we will visualize a few samples from the dataset. While
-aspect-unaware resizing square images does not introduce a significant amount of
-distortion this is not the case for rectangular images. But resizing images to a uniform
-size is a requirement for mini-batching. So we need to perform our resizing such that
-the following criteria are met:
-
-* Aspect ratio is preserved.
-* Content of the images is not affected.
-"""
-
+# Resize the images into rectangles
 
 def distortion_free_resize(image, img_size):
     w, h = img_size
@@ -243,19 +152,6 @@ def distortion_free_resize(image, img_size):
     image = tf.image.flip_left_right(image)
     return image
 
-
-"""
-If we just go with the plain resizing then the images would look like so:
-
-![](https://i.imgur.com/eqq3s4N.png)
-
-Notice how this resizing would have introduced unnecessary stretching.
-"""
-
-"""
-### Putting the utilities together
-"""
-
 batch_size = 64
 padding_token = 99
 image_width = 128
@@ -290,57 +186,9 @@ def prepare_dataset(image_paths, labels):
     )
     return dataset.batch(batch_size).cache().prefetch(AUTOTUNE)
 
-
-"""
-## Prepare `tf.data.Dataset` objects
-"""
-
 train_ds = prepare_dataset(train_img_paths, train_labels_cleaned)
 validation_ds = prepare_dataset(validation_img_paths, validation_labels_cleaned)
 test_ds = prepare_dataset(test_img_paths, test_labels_cleaned)
-
-"""
-## Visualize a few samples
-"""
-
-for data in train_ds.take(1):
-    images, labels = data["image"], data["label"]
-
-    _, ax = plt.subplots(4, 4, figsize=(15, 8))
-
-    for i in range(16):
-        img = images[i]
-        img = tf.image.flip_left_right(img)
-        img = tf.transpose(img, perm=[1, 0, 2])
-        img = (img * 255.0).numpy().clip(0, 255).astype(np.uint8)
-        img = img[:, :, 0]
-
-        # Gather indices where label!= padding_token.
-        label = labels[i]
-        indices = tf.gather(label, tf.where(tf.math.not_equal(label, padding_token)))
-        # Convert to string.
-        label = tf.strings.reduce_join(num_to_char(indices))
-        label = label.numpy().decode("utf-8")
-
-        ax[i // 4, i % 4].imshow(img, cmap="gray")
-        ax[i // 4, i % 4].set_title(label)
-        ax[i // 4, i % 4].axis("off")
-
-
-plt.show()
-
-"""
-You will notice that the content of original image is kept as faithful as possible and has
-been padded accordingly.
-"""
-
-"""
-## Model
-
-Our model will use the CTC loss as an endpoint layer. For a detailed understanding of the
-CTC loss, refer to [this post](https://distill.pub/2017/ctc/).
-"""
-
 
 class CTCLayer(keras.layers.Layer):
     def __init__(self, name=None):
@@ -419,7 +267,7 @@ def build_model():
         inputs=[input_img, labels], outputs=output, name="handwriting_recognizer"
     )
     # Optimizer.
-    opt = keras.optimizers.Adam()
+    opt = tf.keras.optimizers.legacy.Adam()
     # Compile the model and return.
     model.compile(optimizer=opt)
     return model
@@ -429,28 +277,12 @@ def build_model():
 model = build_model()
 model.summary()
 
-"""
-## Evaluation metric
-
-[Edit Distance](https://en.wikipedia.org/wiki/Edit_distance)
-is the most widely used metric for evaluating OCR models. In this section, we will
-implement it and use it as a callback to monitor our model.
-"""
-
-"""
-We first segregate the validation images and their labels for convenience.
-"""
 validation_images = []
 validation_labels = []
 
 for batch in validation_ds:
     validation_images.append(batch["image"])
     validation_labels.append(batch["label"])
-
-"""
-Now, we create a callback to monitor the edit distances.
-"""
-
 
 def calculate_edit_distance(labels, predictions):
     # Get a single batch and convert its labels to sparse tensors.
@@ -489,37 +321,18 @@ class EditDistanceCallback(keras.callbacks.Callback):
             f"Mean edit distance for epoch {epoch + 1}: {np.mean(edit_distances):.4f}"
         )
 
+checkpoint = tf.train.Checkpoint(model)
+checkpoint.restore(os.getcwd() + "/Checkpoints/" + "HandwritingRecog").expect_partial()
 
-"""
-## Training
-
-Now we are ready to kick off model training.
-"""
-
-epochs = 10  # To get good results this should be at least 50.
-
-model = build_model()
 prediction_model = keras.models.Model(
     model.get_layer(name="image").input, model.get_layer(name="dense2").output
 )
-edit_distance_callback = EditDistanceCallback(prediction_model)
 
-# Train the model.
-history = model.fit(
-    train_ds,
-    validation_data=validation_ds,
-    epochs=epochs,
-    callbacks=[edit_distance_callback],
-)
-
-
-"""
-## Inference
-"""
-
-
-# A utility function to decode the output of the network.
 def decode_batch_predictions(pred):
+
+    print("=============== New Img ===============")
+    print(pred)
+
     input_len = np.ones(pred.shape[0]) * pred.shape[1]
     # Use greedy search. For complex tasks, you can use beam search.
     results = keras.backend.ctc_decode(pred, input_length=input_len, greedy=True)[0][0][
@@ -528,47 +341,27 @@ def decode_batch_predictions(pred):
     # Iterate over the results and get back the text.
     output_text = []
     for res in results:
+        print(res) # Extra
         res = tf.gather(res, tf.where(tf.math.not_equal(res, -1)))
         res = tf.strings.reduce_join(num_to_char(res)).numpy().decode("utf-8")
         output_text.append(res)
     return output_text
 
+def DisplayWord(word):
+    word = tf.image.flip_left_right(word)
+    word = tf.transpose(word, perm=[1, 0, 2])
+    # word = (word * 255.0).numpy().clip(0, 255).astype(np.uint8)
+    word = word[:, :, 0]
 
-#  Let's check results on some test samples.
-for batch in test_ds.take(1):
-    batch_images = batch["image"]
-    _, ax = plt.subplots(4, 4, figsize=(15, 8))
+    plt.imshow(word, cmap='gray')
+    plt.show()
 
-    preds = prediction_model.predict(batch_images)
-    pred_texts = decode_batch_predictions(preds)
+test_img = preprocess_image("C:\\Work\\Programming\\Hackathons\\Reprose\\Notes generation\\data\\words\\a06\\a06-008\\a06-008-00-01.png")
 
-    for i in range(16):
-        img = batch_images[i]
-        img = tf.image.flip_left_right(img)
-        img = tf.transpose(img, perm=[1, 0, 2])
-        img = (img * 255.0).numpy().clip(0, 255).astype(np.uint8)
-        img = img[:, :, 0]
+DisplayWord(test_img)
 
-        title = f"Prediction: {pred_texts[i]}"
-        ax[i // 4, i % 4].imshow(img, cmap="gray")
-        ax[i // 4, i % 4].set_title(title)
-        ax[i // 4, i % 4].axis("off")
+test_img = tf.reshape(test_img, [1] + list(test_img.shape))
 
-plt.show()
-
-"""
-To get better results the model should be trained for at least 50 epochs.
-"""
-
-"""
-## Final remarks
-
-* The `prediction_model` is fully compatible with TensorFlow Lite. If you are interested,
-you can use it inside a mobile application. You may find
-[this notebook](https://github.com/tulasiram58827/ocr_tflite/blob/main/colabs/captcha_ocr_tflite.ipynb)
-to be useful in this regard.
-* Not all the training examples are perfectly aligned as observed in this example. This
-can hurt model performance for complex sequences. To this end, we can leverage
-Spatial Transformer Networks ([Jaderberg et al.](https://arxiv.org/abs/1506.02025))
-that can help the model learn affine transformations that maximize its performance.
-"""
+preds = prediction_model.predict(test_img)
+pred_texts = decode_batch_predictions(preds)
+print(pred_texts)
