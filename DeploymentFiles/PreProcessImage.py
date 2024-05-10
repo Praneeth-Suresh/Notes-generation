@@ -89,14 +89,18 @@ def BgChangeOptimised(word, CleaningCoefficient):
 
     word = word * CleaningCoefficient
 
-    print(word, type(word))
-
     word = tf.constant(np.where(word == 0, 1, word))
 
     word = tf.where(word > 1, 1, word)
 
-    word = skimage.img_as_float(word)
-    word = invert(word)
+    word = 1 - word
+
+    # Below, we make the word brighter
+    word = word * 1.5
+
+    word = tf.where(word > 1, 1, word)
+
+    DisplayWord(word)
 
     return tf.constant(word)
 
@@ -172,7 +176,10 @@ def Remove_Slope(image):
 
         y.append(GetVariance(Vals, i))
 
-    core_threshold = x[y.index(min(y))]
+    try:
+        core_threshold = x[y.index(min(y))]
+    except ValueError:
+        return image
 
     base = plt.gca().transData
     rot = transforms.Affine2D().rotate_deg(90)
@@ -327,7 +334,15 @@ def preprocess_image(image_path, img_size=(image_width, image_height)):
     image = tf.cast(image, tf.float32) / 255.0
     
     # Black background
-    image = BgChangeOptimised(image, 1.5)
+    def ClCoeff(image):
+
+        nonzero_indices = tf.where(tf.not_equal(tf.math.reduce_sum(image, axis=1), 0))
+        first_nonzero_index = tf.reduce_min(nonzero_indices, axis=0)[0]
+        last_nonzero_index = tf.reduce_max(nonzero_indices, axis=0)[0]
+
+        return 1 / tf.math.reduce_mean(image[first_nonzero_index: last_nonzero_index])
+
+    image = BgChangeOptimised(image, ClCoeff(image))
 
     # Slope removal
     image = Remove_Slope(image)

@@ -88,27 +88,30 @@ test_labels_cleaned = clean_labels(test_labels)
 
 AUTOTUNE = tf.data.AUTOTUNE
 
-MisSegmented = 0
-
 def process_images_labels(image_path, label):
     print(image_path)
     image = preprocess_image(image_path)
     # this can produce errors; need to add a try catch here
     return CharacterSegmentation(image, label)
 
+MisSegmented = 0
+
 def prepare_dataset(image_paths, labels):
+
+    global MisSegmented
 
     char_list = {}
 
     for path, label in zip(image_paths, labels):
-        try:
-            char_list.update(process_images_labels(path, label))
-        except TypeError:
+        chars = process_images_labels(path, label)
+        if chars != None:
+            char_list.update(chars)
+        else:
             MisSegmented += 1
 
-    return char_list
+    return char_list.keys(), char_list.values() # This is of the form (labels, images)
 
-train_ds = prepare_dataset(train_img_paths, train_labels_cleaned)
-validation_ds = prepare_dataset(validation_img_paths, validation_labels_cleaned)
-test_ds = prepare_dataset(test_img_paths, test_labels_cleaned)
+train_ds_Y, train_ds_X = prepare_dataset(train_img_paths, train_labels_cleaned)
+validation_ds_Y, validation_ds_X = prepare_dataset(validation_img_paths, validation_labels_cleaned)
+test_ds_Y, test_ds_X = prepare_dataset(test_img_paths, test_labels_cleaned)
 
