@@ -494,13 +494,69 @@ def CharacterSegmentation(image, label):
     image = image[left:max(boundaries)]
     boundaries = [i - left for i in boundaries]
 
-    characters = []
+    final_boundaries = [0]
 
     for i in range(len(boundaries) - 1):
-        if abs(boundaries[i] - boundaries[i + 1]) > 3:
-            char = image[boundaries[i]: boundaries[i + 1]]
-            print(char.shape)
-            characters.append(char)
+        if abs(boundaries[i] - boundaries[i + 1]) > 5:
+            final_boundaries.append(boundaries[i + 1])
+        else:
+            final_boundaries[-1] = int((boundaries[i] + boundaries[i+1]) / 2 )
+
+    boundaries = final_boundaries
+
+    # Here we account of mis-segmentations
+    if ( len(boundaries) - 1 ) < len(label):
+        # This is case of undersegmentation
+        while ( len(boundaries) - 1 ) != len(label):
+            diff_max = 0
+            diff_max_i = 0
+            for i in range(len(boundaries) - 1):
+                if (boundaries[i + 1] - boundaries[i]) > diff_max:
+                    diff_max = boundaries[i + 1] - boundaries[i]
+                    diff_max_i = i
+
+            boundaries.insert(i+1, int((boundaries[i + 1] + boundaries[i])/2))
+
+    elif ( len(boundaries) - 1 ) > len(label):
+        # This is the case of undersegmentation
+        while ( len(boundaries) - 1 ) != len(label):
+            sum_min = image_width
+            sum_min_i = 0
+            for i in range(len(boundaries) - 2):
+                if (boundaries[i + 2] - boundaries[i]) < sum_min:
+                    sum_min = boundaries[i + 2] - boundaries[i]
+                    sum_min_i = i + 1
+
+            boundaries.pop(sum_min_i)
+        
+
+    characters = []
+
+    def pad_image(image, target_height, target_width):
+        image = image[:,tf.where(tf.reduce_sum(image, axis=0))[0][0]:tf.where(tf.reduce_sum(image, axis=0))[-1][0]]
+
+        # Get the current dimensions of the image
+        height, width = tf.shape(image)[0], tf.shape(image)[1]
+
+        # Calculate the amount of padding needed
+        pad_height = tf.maximum(128 - height, 0)
+        pad_width = tf.maximum(128 - width, 0)
+
+        # Calculate the amount of padding on each side
+        top_pad = pad_height // 2
+        bottom_pad = pad_height - top_pad
+        left_pad = pad_width // 2
+        right_pad = pad_width - left_pad
+
+        # Pad the image
+        padded_image = tf.pad(image, [[top_pad, bottom_pad], [left_pad, right_pad]], mode='CONSTANT', constant_values=0)
+
+        return tf.image.resize(tf.reshape(padded_image, [padded_image.shape[0], padded_image.shape[1], 1]), [target_height, target_width])
+
+    for i in range(len(boundaries) - 1):
+        char = image[boundaries[i]: boundaries[i + 1]]
+        print(char.shape)
+        characters.append(pad_image(char, 64, 64))
 
     if len(characters) == len(label):
         labelled_characters = {}
