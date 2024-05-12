@@ -1,11 +1,17 @@
 import numpy as np
 import os
+import pickle
+
+from tensorflow.keras import layers
+from keras.layers import Input, Dense, Conv2D, MaxPooling2D, UpSampling2D, Flatten
+from keras.models import Model
+from keras import backend as K
 import tensorflow as tf
 
 from PreProcessImage import preprocess_image, CharacterSegmentation
 
 batch_size = 64
-image_width, image_height = (512, 128)
+image_width, image_height = (64, 64)
 
 # This file implements the training pipeline necessary
 
@@ -115,3 +121,59 @@ train_ds_Y, train_ds_X = prepare_dataset(train_img_paths, train_labels_cleaned)
 validation_ds_Y, validation_ds_X = prepare_dataset(validation_img_paths, validation_labels_cleaned)
 test_ds_Y, test_ds_X = prepare_dataset(test_img_paths, test_labels_cleaned)
 
+# Save this data accordingly
+loc = "SegmentedChars\\DataY"
+
+with open(loc, "wb") as f:
+    pickle.dump(train_ds_Y + validation_ds_Y + test_ds_Y, f)
+
+loc = "SegmentedChars\\DataX"
+
+with open(loc, "wb") as f:
+    pickle.dump(train_ds_X + validation_ds_X + test_ds_X, f)
+
+# The CNN is defined here
+class Autoencoder(Model):
+  def __init__(self, image_width, image_height):
+    super(Autoencoder, self).__init__()
+
+    self.encoder = tf.keras.Sequential([
+      Input(shape=(image_width, image_height, 1)),
+      Conv2D(32, (3, 3), activation='relu', padding='same'),
+      MaxPooling2D((2, 2), padding='same'),
+      Conv2D(32, (3, 3), activation='relu', padding='same'),
+      MaxPooling2D((2, 2), padding='same'),
+      Dense(8, activation='relu'),
+      MaxPooling2D((2, 2), padding='same')
+    ])
+    self.decoder = tf.keras.Sequential([
+      Input(shape=(int(image_width/8), int(image_height/8), 8)),
+      # Input(shape=(8, 8, 8)),
+      UpSampling2D((2, 2)),
+      Dense(8, activation='relu'),
+      Conv2D(32, (3, 3), activation='relu', padding='same'),
+      UpSampling2D((2, 2)),
+      Conv2D(32, (3, 3), activation='relu', padding='same'),
+      UpSampling2D((2, 2)),
+      Conv2D(1, (3, 3), activation='sigmoid', padding='same')
+    ])
+
+  def call(self, x):
+    encoded = self.encoder(x)
+    print(encoded.shape)
+    decoded = self.decoder(encoded)
+    return decoded
+
+
+autoencoder = Autoencoder(image_height, image_width)
+image = tf.random.uniform((1, image_height, image_width, 1), minval=0, maxval=1, dtype=tf.float32)
+autoencoder(image)
+autoencoder.summary()
+
+autoencoder.compile(optimizer='adam', loss='binary_crossentropy')
+history = autoencoder.fit(train_ds_X, train_ds_X, # X = Y heres
+                epochs=20,
+                batch_size=256,
+                shuffle=True)
+
+autoencoder.save_weights(os.getcwd() + "/Checkpoints/" + "Autoencoder")
