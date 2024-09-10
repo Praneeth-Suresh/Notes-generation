@@ -135,16 +135,17 @@ def VerticalHistorgram(image):
     sums = tf.reduce_sum(image, axis=0)
     return sums
 
-def Remove_Slope(image):
-    def RotateImage(image, angle):
-        image = tf.reshape(image, [image_width,image_height])
-        im = image.numpy()
-        im = Image.fromarray(im)
-        im_rotated = im.rotate(angle=angle)
-        im = np.asarray(im_rotated)
-        image_r = tf.convert_to_tensor(im)
+def RotateImage(image, angle):
+    image = tf.reshape(image, [image_width,image_height])
+    im = image.numpy()
+    im = Image.fromarray(im)
+    im_rotated = im.rotate(angle=angle)
+    im = np.asarray(im_rotated)
+    image_r = tf.convert_to_tensor(im)
 
-        return image_r
+    return image_r
+
+def Remove_Slope(image):
 
     base = plt.gca().transData
     rot = transforms.Affine2D().rotate_deg(90)
@@ -261,8 +262,11 @@ def Remove_Slope(image):
     rotate = - math.atan(line.coef_[0][0]) * 180 / math.pi
     image = RotateImage(image, rotate)
 
-    return image
+    return image, rotate
 
+def ShearImg(image, angle):
+    shear = tf.keras.preprocessing.image.apply_affine_transform(image, theta = angle, shear = - angle)
+    return tf.reshape(image, [image_width, image_height])
 
 def remove_slant(image):
     # Shear investigation function
@@ -315,16 +319,17 @@ def remove_slant(image):
     image = tf.reshape(image, [image_width, image_height])
     image = tf.reshape(image, [1, image_width, image_height])
 
-    shear = tf.keras.preprocessing.image.apply_affine_transform(image, theta = ShearAngle, shear = - ShearAngle)
+    image = ShearImg(image, ShearAngle)
 
-    image = shear
+    return image, ShearAngle
 
-    image = tf.reshape(image, [image_width, image_height])
+def ClCoeff(image):
 
-    return image
+    nonzero_indices = tf.where(tf.not_equal(tf.math.reduce_sum(image, axis=1), 0))
+    first_nonzero_index = tf.reduce_min(nonzero_indices, axis=0)[0]
+    last_nonzero_index = tf.reduce_max(nonzero_indices, axis=0)[0]
 
-
-
+    return 1 / tf.math.reduce_mean(image[first_nonzero_index: last_nonzero_index])
 
 
 def preprocess_image(image_path, img_size=(image_width, image_height)):
@@ -334,29 +339,31 @@ def preprocess_image(image_path, img_size=(image_width, image_height)):
     image = tf.cast(image, tf.float32) / 255.0
     
     # Black background
-    def ClCoeff(image):
-
-        nonzero_indices = tf.where(tf.not_equal(tf.math.reduce_sum(image, axis=1), 0))
-        first_nonzero_index = tf.reduce_min(nonzero_indices, axis=0)[0]
-        last_nonzero_index = tf.reduce_max(nonzero_indices, axis=0)[0]
-
-        return 1 / tf.math.reduce_mean(image[first_nonzero_index: last_nonzero_index])
-
     image = BgChangeOptimised(image, ClCoeff(image))
 
     # Slope removal
-    image = Remove_Slope(image)
+    image, rotate = Remove_Slope(image)
 
     # Slant removal
-    image = remove_slant(image)
+    image, shear = remove_slant(image)
 
-    return image
-
-
+    return image, rotate, shear
 
 
 
-def CharacterSegmentation(image, label):
+
+
+def CharacterSegmentation(image, label, image_path, rotate, shear, img_size=(image_width, image_height)):
+
+    word = tf.io.read_file(image_path)
+    word = tf.image.decode_png(word, 1)
+    word = distortion_free_resize(word, img_size)
+    word = tf.cast(word, tf.float32) / 255.0
+    # Black background
+    word = BgChangeOptimised(word, ClCoeff(word))
+    word = RotateImage(word, rotate)
+    word = ShearImg(word, rotate)
+    
     # All this is for the purpose of visualising the points at which the breaks needed to be drawn
 
     def DrawVertical(x_position, image):
@@ -474,8 +481,30 @@ def CharacterSegmentation(image, label):
 
         return segments, differences
 
-    segments, differences = TreeSegmentation([tf.argmax(tf.cast(tf.not_equal(sums, 0), tf.int32), output_type=tf.int32).numpy(), image_width - tf.argmax(tf.cast(tf.not_equal(tf.reverse(sums, axis=[0]), 0), tf.int32), output_type=tf.int32).numpy()], threshold = int(image_width / 50))
+    # This draws a boundary in the middle of the blank spaces between characters
 
+    im2 = BgChangeOptimised(word, ClCoeff(word) * 1.5)
+    """ The same tranformations that were applied to 'image' need to be applied to be 'word' so that the new image generated is also compatible"""
+    im2 = tf.reshape(im2, [im2.shape[0], im2.shape[1]])
+    sums2 = tf.reduce_sum(tf.math.square(im2), axis=1)
+
+    segments = [tf.argmax(tf.cast(tf.not_equal(sums2, 0), tf.int32), output_type=tf.int32).numpy(), image_width - tf.argmax(tf.cast(tf.not_equal(tf.reverse(sums2, axis=[0]), 0), tf.int32), output_type=tf.int32).numpy()]
+
+    started = False
+
+    for i in range(tf.argmax(tf.cast(tf.not_equal(sums2, 0), tf.int32), output_type=tf.int32).numpy() + 1, image_width - tf.argmax(tf.cast(tf.not_equal(tf.reverse(sums2, axis=[0]), 0), tf.int32), output_type=tf.int32).numpy()):
+        if sums2[i] == 0 and not started:
+            start = i
+            started = True
+        elif sums2[i] != 0 and sums2[i - 1] == 0:
+            end = i
+            segments.append(int((start + end) / 2))
+            started = False
+
+    segments.sort()
+
+    differences = [segments[i + 1] - segments[i] for i in range(len(segments) - 1)]
+    
     avg_diff = sum(differences) / ( len(differences) + 2 )
 
     new_segments = []

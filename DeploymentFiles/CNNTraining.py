@@ -96,9 +96,9 @@ AUTOTUNE = tf.data.AUTOTUNE
 
 def process_images_labels(image_path, label):
     print(image_path)
-    image = preprocess_image(image_path)
+    image, rotate, shear = preprocess_image(image_path)
     # this can produce errors; need to add a try catch here
-    return CharacterSegmentation(image, label)
+    return CharacterSegmentation(image, label, image_path, rotate, shear)
 
 MisSegmented = 0
 
