@@ -13,3 +13,15 @@ Neural network structure: CNN
 Take this for reference: https://keras.io/examples/vision/handwriting_recognition/
 If the above is insufficient, make chages to expand or otherwise perfect the Neural Network.
 """
+
+import numpy as np
+import tensorflow as tf
+import pandas as pd
+
+# Pre-processing
+## Features to implement: 
+# - image multiplication (make more samples 1:20 ratio)
+# - standardise image sizing (to 128 by 128) 
+# - standardise pixel value limits (0 to 1)
+
+src = pd.read_csv()
