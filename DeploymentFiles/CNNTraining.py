@@ -50,7 +50,7 @@ print(f"Total training samples: {len(train_samples)}")
 print(f"Total validation samples: {len(validation_samples)}")
 print(f"Total test samples: {len(test_samples)}")
 
-# BUild the data input pipeline
+# Build the data input pipeline
 
 base_image_path = os.path.join(base_path, "words")
 
@@ -114,6 +114,8 @@ def prepare_dataset(image_paths, labels):
             char_list.update(chars)
         else:
             MisSegmented += 1
+
+    # This will not work anymore because CharacterSegmentation has been modified
 
     return char_list.keys(), char_list.values() # This is of the form (labels, images)
 
