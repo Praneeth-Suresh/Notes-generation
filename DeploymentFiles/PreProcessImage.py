@@ -373,14 +373,17 @@ def preprocess_image(image_path, img_size=(image_width, image_height)):
 
 
 
-def CharacterSegmentation(image, label, image_path, rotate, shear, img_size=(image_width, image_height)):
+def CharacterSegmentation(label, image_path, rotate, shear, img_size=(image_width, image_height)):
 
     word = tf.io.read_file(image_path)
     word = tf.image.decode_png(word, 1)
     word = distortion_free_resize(word, img_size)
     word = tf.cast(word, tf.float32) / 255.0
     # Black background
-    word = BgChangeOptimised(word, ClCoeff(word))
+    image = BgChangeOptimised(word, ClCoeff(word))
+    image = RotateImage(image, rotate)
+    image = ShearImg(image, rotate)
+
     word = RotateImage(word, rotate)
     word = ShearImg(word, rotate)
     
@@ -461,18 +464,14 @@ def CharacterSegmentation(image, label, image_path, rotate, shear, img_size=(ima
     def TreeSegmentation(segments, threshold):    
         # Threshold is the width of a segment according to the list segments
         differences = [segments[i + 1] - segments[i] for i in range(len(segments) - 1)]
+        index = 0
 
         while True:
-
-            if sum([True if j < threshold else False for j in differences]) == 1:
-                index = -2
-            elif sum([True if j < threshold else False for j in differences]) == 0:
-                index = 0
-            else:
+            try:
+                begin = segments[index]
+                end = segments[index + 1]
+            except IndexError:
                 break
-
-            begin = segments[index]
-            end = segments[index + 1]
 
             losses = []
 
@@ -492,13 +491,25 @@ def CharacterSegmentation(image, label, image_path, rotate, shear, img_size=(ima
             # plt.plot(losses)
             # plt.show()
 
-            segments.append(losses.index(min(losses)) + begin)
+            new = losses.index(min(losses)) + begin
 
-            segments.sort()
+            if new not in segments:
+                print(new)
+    
+                segments.append(new)
 
-            print(segments)
+                segments.sort()
 
-            differences = [segments[i + 1] - segments[i] for i in range(len(segments) - 1)]
+                print(segments)
+
+                differences = [segments[i + 1] - segments[i] for i in range(len(segments) - 1)]
+
+                if differences[segments.index(new) - 1] < threshold and differences[segments.index(new)] < threshold:
+                    index += 2
+            else:
+                index += 2
+
+        DrawBoundaries(segments, image)
 
         return segments, differences
 
