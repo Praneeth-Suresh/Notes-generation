@@ -85,8 +85,9 @@ AUTOTUNE = tf.data.AUTOTUNE
 def process_images_labels(image_path, label):
     print(image_path)
     image, rotate, shear = preprocess_image(image_path)
+    print("Pre-processing metrics generated")
     # this can produce errors; need to add a try catch here
-    return CharacterSegmentation(image, label, image_path, rotate, shear)
+    return CharacterSegmentation(label, image_path, rotate, shear)
 
 MisSegmented = 0
 
@@ -192,3 +193,8 @@ def ProcessWord(characters):
         i += 1
 
     return word
+
+for x, y in zip(test_ds_X, test_ds_Y):
+    y_pred = ProcessWord(x)
+    print("The word guessed is :", y_pred)
+    print("The actual word is ", y)

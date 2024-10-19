@@ -265,6 +265,7 @@ def Remove_Slope(image):
     return image, rotate
 
 def ShearImg(image, angle):
+    image = tf.reshape(image, [1, image_width, image_height])
     shear = tf.keras.preprocessing.image.apply_affine_transform(image, theta = angle, shear = - angle)
     return tf.reshape(image, [image_width, image_height])
 
@@ -382,7 +383,7 @@ def CharacterSegmentation(label, image_path, rotate, shear, img_size=(image_widt
     # Black background
     image = BgChangeOptimised(word, ClCoeff(word))
     image = RotateImage(image, rotate)
-    image = ShearImg(image, rotate)
+    image = ShearImg(image, shear)
 
     word = RotateImage(word, rotate)
     word = ShearImg(word, rotate)
