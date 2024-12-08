@@ -1,5 +1,5 @@
 # PNN stands for a Probabilistically Weighted Neural Network.
-# This file uses the trained PNN from PNNTraining.py to classifcy and segment images at the same time.
+# This file uses the trained PNN from PNNTraining.py to classify and segment images at the same time.
 
 # The input is going to be: previous character and image of current character
 # If there is no previous character, input "-"; index = 100
@@ -28,15 +28,21 @@ chars = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C',
 learning_rate = 0.5
 base_path = """C://Work//Programming//Hackathons//Reprose//Notes generation//DeploymentFiles//data//"""
 words_list = []
+max_length = 10 # This is to limit the code so that it can be run locally
 
 # We get the file names from the datatset with which we can open the images later
 
+count = 0
 words = open(f"{base_path}/words.txt", "r").readlines()
 for line in words:
     if line[0] == "#":
         continue
     
     words_list.append(line.strip())
+
+    count += 1
+    if count == max_length:
+        break
 
 print(len(words_list))
 
@@ -91,23 +97,6 @@ def process_images_labels(image_path, label):
 
 MisSegmented = 0
 
-def prepare_dataset(image_paths, labels):
-
-    global MisSegmented
-
-    char_list = []
-    label_list = []
-
-    for path, label in zip(image_paths, labels):
-        chars, label = process_images_labels(path, label)
-        char_list.append(chars)
-        label_list.append(label)
-
-    return label_list, char_list
-
-test_ds_Y, test_ds_X = prepare_dataset(test_img_paths, test_labels_cleaned)
-
-
 
 # We build the PNN model
 
@@ -128,9 +117,10 @@ opt = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
 model.compile(optimizer=opt)
 
+""""In the time that the PNN is being developed, the checkpoints will remain commented.
 checkpoint = tf.train.Checkpoint(model)
 checkpoint.restore(os.getcwd() + "/Checkpoints/" + "PNN").expect_partial()
-
+"""
 
 def GetProbs(prev): # The input is the index of the character, not the character itself
 
@@ -151,6 +141,26 @@ def PNNprocess(img, prev): # prev is the index of the previous character
 
     return tf.math.multiply(y1, y2)
 
+# Below is the mock code to be used till the NN is up
+import matplotlib.pyplot as plt
+def PNN_Mock(img, prev): # This is a mock function to test the code until the PNN is up
+    img = tf.reshape(img, [128, 128])
+    plt.imshow(img, cmap='gray', vmin=0, vmax=1)
+
+    char = input("Enter the character that you just saw. If it could not be distinguised, enter 00 : ")
+    if char == "00":
+        y1 = [1 / len(chars)] * len(chars)
+    else:
+        strength = 0.8
+        y1 = [(1 - strength) / (len(chars) - 1)] * len(chars)
+        y1[chars.index(char)] = strength
+
+    if prev == 100:
+        y2 = np.array([[1/len(chars)] for i in range(len(chars))])
+    else:
+        y2 = GetProbs(prev)
+
+    return tf.math.multiply(y1, y2)
 
 
 # # Now we apply the logic to get the word recognised
@@ -169,14 +179,14 @@ def ProcessWord(characters):
     prev = 100
     while i < len(characters):
         img1 = pad_image(characters[i], 128, 128)
-        y1 = PNNprocess(tf.reshape(img1, [1,128,128,1]), prev)
+        y1 = PNN_Mock(tf.reshape(img1, [1,128,128,1]), prev)
 
         # All p quantities will be length 2 tuples (position of max, value of max)
         p1 = (tf.argmax(y1[0]), tf.math.reduce_max(y1[0]))
 
         try:
             img2 = CombineImg(characters[i], characters[i + 1])
-            y2 = PNNprocess(tf.reshape(img2, [1,128,128,1]), prev)
+            y2 = PNN_Mock(tf.reshape(img2, [1,128,128,1]), prev)
             p2 = (tf.argmax(y2[0]), tf.math.reduce_max(y2[0]))
             
         except IndexError:
@@ -194,7 +204,16 @@ def ProcessWord(characters):
 
     return word
 
-for x, y in zip(test_ds_X, test_ds_Y):
-    y_pred = ProcessWord(x)
+y_pred_list = []
+label_list = []
+
+for path, label in zip(test_img_paths, test_labels_cleaned):
+    cs, label = process_images_labels(path, label)
+    label_list.append(label)
+
+    y_pred = ProcessWord(cs)
+
     print("The word guessed is :", y_pred)
-    print("The actual word is ", y)
+    print("The actual word is ", label)  
+
+    y_pred_list.append(y_pred)  

@@ -574,6 +574,7 @@ def CharacterSegmentation(label, image_path, rotate, shear, img_size=(image_widt
         if abs(boundaries[i] - boundaries[i + 1]) > 3:
             char = image[boundaries[i]: boundaries[i + 1]]
             print(char.shape)
-            characters.append(pad_image(char, 128, 128))
+            # characters.append(pad_image(char, 128, 128))
+            characters.append(char) # it is not padded because segments will be combined later in the recognition stage
 
     return characters, label
