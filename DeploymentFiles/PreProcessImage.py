@@ -573,8 +573,9 @@ def CharacterSegmentation(label, image_path, rotate, shear, img_size=(image_widt
     for i in range(len(boundaries) - 1):
         if abs(boundaries[i] - boundaries[i + 1]) > 3:
             char = image[boundaries[i]: boundaries[i + 1]]
+            char = tf.image.rot90(tf.reshape(char, [char.shape[0], char.shape[1], 1]), k=1)
             print(char.shape)
             # characters.append(pad_image(char, 128, 128))
-            characters.append(char) # it is not padded because segments will be combined later in the recognition stage
+            characters.append(tf.reshape(char, (char.shape[0], char.shape[1]))) # it is not padded because segments will be combined later in the recognition stage
 
     return characters, label

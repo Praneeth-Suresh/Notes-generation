@@ -167,18 +167,18 @@ def PNN_Mock(img, prev): # This is a mock function to test the code until the PN
 # Create a loop to pass 1 character, then the combination of two characters into the PNN
 # Before passing the character into the PNN pass it through pad_image
 
-word = "" # Add the recognised string successively here
-characters = []
-
 def CombineImg(image1, image2):
-    return pad_image(tf.concat([image1, image2], axis=0), 128, 128)
+    return pad_image(tf.concat([image1, image2], axis=1), 128, 128)
 
 def ProcessWord(characters):
+
+    word = "" # Add the recognised string successively here
 
     i = 0
     prev = 100
     while i < len(characters):
         img1 = pad_image(characters[i], 128, 128)
+        """The image is processed sideways, it needs to be rotated"""
         y1 = PNN_Mock(tf.reshape(img1, [1,128,128,1]), prev)
 
         # All p quantities will be length 2 tuples (position of max, value of max)
@@ -193,10 +193,8 @@ def ProcessWord(characters):
             p2 = (0, 0)
 
         if p1[1] > p2[1]:
-            characters.append(p1[0])
             word += chars[p1[0]]
         else:
-            characters.append(p2[0])
             word += chars[p2[0]]
             i += 1
 
