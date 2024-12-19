@@ -508,7 +508,7 @@ def CharacterSegmentation(label, image_path, rotate, shear, img_size=(image_widt
                 if differences[segments.index(new) - 1] < threshold and differences[segments.index(new)] < threshold:
                     index += 2
             else:
-                index += 2
+                index += 1
 
         DrawBoundaries(segments, image)
 
