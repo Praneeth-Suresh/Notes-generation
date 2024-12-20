@@ -333,6 +333,8 @@ def ClCoeff(image):
     return 1 / tf.math.reduce_mean(image[first_nonzero_index: last_nonzero_index])
 
 def pad_image(image, target_height, target_width):
+    image = tf.reshape(image, (image.shape[0], image.shape[1]))
+
     image = image[:,tf.where(tf.reduce_sum(image, axis=0))[0][0]:tf.where(tf.reduce_sum(image, axis=0))[-1][0]]
 
     # Get the current dimensions of the image
@@ -370,6 +372,21 @@ def preprocess_image(image_path, img_size=(image_width, image_height)):
 
     return image, rotate, shear
 
+def HeightWord(word):
+    
+    Vals = VerticalHistorgram(word)
+
+    first = 128
+    last = 0
+
+    for i in range(Vals.shape[0]):
+        if Vals[i].numpy() > 0 and i < first:
+            first = i
+        if Vals[i].numpy() == 0 and i > first:
+            last = i
+            return last - first
+        
+    return 128
 
 
 
@@ -538,7 +555,7 @@ def CharacterSegmentation(label, image_path, rotate, shear, img_size=(image_widt
 
     differences = [segments[i + 1] - segments[i] for i in range(len(segments) - 1)]
     
-    avg_diff = sum(differences) / ( len(differences) + 2 )
+    avg_diff = HeightWord(word) * 0.6
 
     new_segments = []
 

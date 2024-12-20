@@ -124,7 +124,7 @@ checkpoint.restore(os.getcwd() + "/Checkpoints/" + "PNN").expect_partial()
 
 def GetProbs(prev): # The input is the index of the character, not the character itself
 
-    df2 = pd.read_csv('data//TransitionModel.csv', header=None)
+    df2 = pd.read_csv(f"{base_path}/TransitionModel.csv", header=None)
 
     sum = df2.loc[prev].sum()
 
@@ -147,13 +147,14 @@ def PNN_Mock(img, prev): # This is a mock function to test the code until the PN
     img = tf.reshape(img, [128, 128])
     plt.imshow(img, cmap='gray', vmin=0, vmax=1)
 
+    print("Data is to be entered in the format <character><strength> eg: m8 (strength is out of 10)")
     char = input("Enter the character that you just saw. If it could not be distinguised, enter 00 : ")
     if char == "00":
         y1 = [1 / len(chars)] * len(chars)
     else:
-        strength = 0.8
+        strength = int(char[1]) / 10
         y1 = [(1 - strength) / (len(chars) - 1)] * len(chars)
-        y1[chars.index(char)] = strength
+        y1[chars.index(char[0])] = strength
 
     if prev == 100:
         y2 = np.array([[1/len(chars)] for i in range(len(chars))])
@@ -168,9 +169,9 @@ def PNN_Mock(img, prev): # This is a mock function to test the code until the PN
 # Before passing the character into the PNN pass it through pad_image
 
 def CombineImg(image1, image2):
-    return pad_image(tf.concat([image1, image2], axis=1), 128, 128)
+    return tf.concat([image1, image2], axis=1)
 
-def ProcessWord(characters):
+def ProcessWordOld(characters):
 
     word = "" # Add the recognised string successively here
 
@@ -201,6 +202,34 @@ def ProcessWord(characters):
         i += 1
 
     return word
+
+def ProcessWord(characters):
+    word = "" # Add the recognised string successively here
+
+    i = 0
+    prev = 100
+    while i < len(characters):
+
+        imgn = [characters[i]]
+        yn = [PNN_Mock(tf.reshape(pad_image(imgn[0], 128, 128), [1,128,128,1]), prev)]
+        pn = [(tf.argmax(yn[0][0]), tf.math.reduce_max(yn[0][0]))]
+
+        combi = 0 # Numbers of segments in the combination
+
+        while pn[combi - 1][1] <= pn[combi][1]: # This loop will execute once no matter what
+            try:
+                imgn.append(CombineImg(imgn[combi], characters[i + combi + 1]))
+                yn.append(PNN_Mock(tf.reshape(pad_image(imgn[-1], 128, 128), [1,128,128,1]), prev))
+                pn.append((tf.argmax(yn[-1][0]), tf.math.reduce_max(yn[-1][0])))
+            except IndexError:
+                pn.append((0,0))
+
+            combi += 1
+
+        word += chars[pn[combi - 1][0]]
+        prev = word[-1]
+        i += combi 
+
 
 y_pred_list = []
 label_list = []
