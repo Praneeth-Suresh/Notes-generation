@@ -152,16 +152,20 @@ def PNN_Mock(img, prev): # This is a mock function to test the code until the PN
     if char == "00":
         y1 = [1 / len(chars)] * len(chars)
     else:
-        strength = int(char[1]) / 10
+        try:
+            strength = int(char[1]) / 10
+        except ValueError:
+            strength = 0.5
+            
         y1 = [(1 - strength) / (len(chars) - 1)] * len(chars)
         y1[chars.index(char[0])] = strength
 
     if prev == 100:
-        y2 = np.array([[1/len(chars)] for i in range(len(chars))])
+        y2 = np.array([1/len(chars) for i in range(len(chars))])
     else:
         y2 = GetProbs(prev)
 
-    return tf.math.multiply(y1, y2)
+    return tf.math.multiply(y1, y2) # The  shape of y2 is wrong
 
 
 # # Now we apply the logic to get the word recognised
@@ -212,7 +216,7 @@ def ProcessWord(characters):
 
         imgn = [characters[i]]
         yn = [PNN_Mock(tf.reshape(pad_image(imgn[0], 128, 128), [1,128,128,1]), prev)]
-        pn = [(tf.argmax(yn[0][0]), tf.math.reduce_max(yn[0][0]))]
+        pn = [(tf.argmax(yn[0]), tf.math.reduce_max(yn[0]))]
 
         combi = 0 # Numbers of segments in the combination
 
@@ -220,15 +224,17 @@ def ProcessWord(characters):
             try:
                 imgn.append(CombineImg(imgn[combi], characters[i + combi + 1]))
                 yn.append(PNN_Mock(tf.reshape(pad_image(imgn[-1], 128, 128), [1,128,128,1]), prev))
-                pn.append((tf.argmax(yn[-1][0]), tf.math.reduce_max(yn[-1][0])))
+                pn.append((tf.argmax(yn[-1]), tf.math.reduce_max(yn[-1])))
             except IndexError:
                 pn.append((0,0))
 
             combi += 1
 
         word += chars[pn[combi - 1][0]]
-        prev = word[-1]
+        prev = pn[combi - 1][0].numpy()
         i += combi 
+
+    return word
 
 
 y_pred_list = []

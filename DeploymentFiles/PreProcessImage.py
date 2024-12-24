@@ -504,7 +504,7 @@ def CharacterSegmentation(label, image_path, rotate, shear, img_size=(image_widt
             loss1 = Normalise(loss1, 15)
             loss2 = Normalise(loss2, 5)
 
-            losses = [ loss0[i] - loss1[i] + loss2[i] for i in range(len(losses))]
+            losses = [ loss0[i] - loss1[i] + loss2[i] for i in range(len(losses))] # Variance of segmentation pts - variance within each segment
 
             # plt.plot(losses)
             # plt.show()
