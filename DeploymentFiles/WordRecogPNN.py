@@ -15,11 +15,12 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow.keras import datasets, layers, models
 
-from PreProcessImage import preprocess_image, CharacterSegmentation, pad_image
+from PreProcessImage import preprocess_image, CharacterSegmentation, pad_image, DrawBoundaries
 
 
 root = """data\\"""
 img_size = (128, 128)
+nn_input = (32, 32)
 chars = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C',
        'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
        'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c',
@@ -29,6 +30,7 @@ learning_rate = 0.5
 base_path = """C://Work//Programming//Hackathons//Reprose//Notes generation//DeploymentFiles//data//"""
 words_list = []
 max_length = 10 # This is to limit the code so that it can be run locally
+start_number = 150 # This is to allow different segments of the datasets to be accessed
 
 # We get the file names from the datatset with which we can open the images later
 
@@ -37,11 +39,14 @@ words = open(f"{base_path}/words.txt", "r").readlines()
 for line in words:
     if line[0] == "#":
         continue
+    if count < start_number:
+        count += 1
+        continue
     
     words_list.append(line.strip())
 
     count += 1
-    if count == max_length:
+    if count == max_length + start_number:
         break
 
 print(len(words_list))
@@ -100,27 +105,25 @@ MisSegmented = 0
 
 # We build the PNN model
 
-model = models.Sequential()
+model = tf.keras.Sequential()
 
-# Here's the convnet
-model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=(img_size[0], img_size[1], 1)))
-model.add(layers.MaxPooling2D((2, 2)))
-model.add(layers.Conv2D(64, (3, 3), activation='relu'))
-model.add(layers.MaxPooling2D((2, 2)))
-model.add(layers.Conv2D(64, (3, 3), activation='relu'))
-# This is the dense net that parses the output from the convnet
-model.add(layers.Flatten())
-model.add(layers.Dense(256, activation='relu'))
-model.add(layers.Dense(len(chars)))
+model.add(tf.keras.Input(shape=(nn_input[0] * nn_input[1],)))
+model.add(layers.Dense(70, activation="sigmoid"))
+model.add(layers.Dense(60, activation="sigmoid"))
+# model.add(layers.Dense(50, activation="sigmoid"))
+# model.add(layers.Dense(50, activation="sigmoid"))
+model.add(layers.Dense(60, activation="sigmoid"))
+model.add(layers.Dense(len(chars), activation="softmax"))
 
 opt = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
 model.compile(optimizer=opt)
 
 """"In the time that the PNN is being developed, the checkpoints will remain commented.
-checkpoint = tf.train.Checkpoint(model)
-checkpoint.restore(os.getcwd() + "/Checkpoints/" + "PNN").expect_partial()
 """
+checkpoint = tf.train.Checkpoint(model)
+checkpoint.restore(os.getcwd() + "/DeploymentFiles/Checkpoints/" + "PNN").expect_partial()
+""" end"""
 
 def GetProbs(prev): # The input is the index of the character, not the character itself
 
@@ -130,22 +133,27 @@ def GetProbs(prev): # The input is the index of the character, not the character
 
     return df2.loc[prev].tolist() / sum
 
+def ResizeImage(img, new_dim=(32,32)):
+    img = tf.reshape(img, [img.shape[0], img.shape[1], 1], tf.image.ResizeMethod.GAUSSIAN)
+    nn_shape = [new_dim[0], new_dim[1], 1]
+    return tf.reshape(tf.image.resize(img, new_dim), nn_shape)
 
 def PNNprocess(img, prev): # prev is the index of the previous character
-    y1 = model(tf.reshape(img, [1,128,128,1]))
+    y1 = model(tf.reshape(ResizeImage(img, nn_input), [1, nn_input[0] * nn_input[1]]))
 
     if prev == 100:
-        y2 = np.array([[1/len(chars)] for i in range(len(chars))])
+        y2 = np.array([1/len(chars) for i in range(len(chars))])
     else:
         y2 = GetProbs(prev)
 
-    return tf.math.multiply(y1, y2)
+    return tf.math.multiply(y1, y2)[0]
 
 # Below is the mock code to be used till the NN is up
 import matplotlib.pyplot as plt
 def PNN_Mock(img, prev): # This is a mock function to test the code until the PNN is up
     img = tf.reshape(img, [128, 128])
     plt.imshow(img, cmap='gray', vmin=0, vmax=1)
+    plt.show()
 
     print("Data is to be entered in the format <character><strength> eg: m8 (strength is out of 10)")
     char = input("Enter the character that you just saw. If it could not be distinguised, enter 00 : ")
@@ -154,7 +162,7 @@ def PNN_Mock(img, prev): # This is a mock function to test the code until the PN
     else:
         try:
             strength = int(char[1]) / 10
-        except ValueError:
+        except (ValueError, IndexError):
             strength = 0.5
             
         y1 = [(1 - strength) / (len(chars) - 1)] * len(chars)
@@ -165,7 +173,7 @@ def PNN_Mock(img, prev): # This is a mock function to test the code until the PN
     else:
         y2 = GetProbs(prev)
 
-    return tf.math.multiply(y1, y2) # The  shape of y2 is wrong
+    return tf.math.multiply(y1, y2) 
 
 
 # # Now we apply the logic to get the word recognised
@@ -178,44 +186,61 @@ def CombineImg(image1, image2):
 
 def ProcessWord(characters):
     word = "" # Add the recognised string successively here
+    segment_final = [0] # Add the final segmentation boundaries here
 
     i = 0
     prev = 100
+
+    wn = [characters[i].shape[1] for i in range(len(characters))]
+
     while i < len(characters):
 
         imgn = [characters[i]]
-        yn = [PNN_Mock(tf.reshape(pad_image(imgn[0], 128, 128), [1,128,128,1]), prev)]
+        yn = [PNN_Mock(tf.reshape(pad_image(imgn[0], 128, 128), [128,128,1]), prev)]
         pn = [(tf.argmax(yn[0]), tf.math.reduce_max(yn[0]))]
 
         combi = 0 # Numbers of segments in the combination
 
         while pn[combi - 1][1] <= pn[combi][1]: # This loop will execute once no matter what
             try:
-                imgn.append(CombineImg(imgn[combi], characters[i + combi + 1]))
-                yn.append(PNN_Mock(tf.reshape(pad_image(imgn[-1], 128, 128), [1,128,128,1]), prev))
+                temp_img = CombineImg(imgn[combi], characters[i + combi + 1])
+                imgn.append(temp_img)
+                yn.append(PNN_Mock(tf.reshape(pad_image(imgn[-1], 128, 128), [128,128,1]), prev))
                 pn.append((tf.argmax(yn[-1]), tf.math.reduce_max(yn[-1])))
             except IndexError:
                 pn.append((0,0))
 
             combi += 1
 
-        word += chars[pn[combi - 1][0]]
+        temp_img = tf.reshape(tf.reshape(pad_image(imgn[-1], 128, 128), [128,128,1]), [128, 128])
+        plt.imshow(temp_img, cmap='gray', vmin=0, vmax=1)
+         
+        CharRec = chars[pn[combi - 1][0]]
+        print("Character recognised as ", CharRec)
+        word += CharRec
+        # Add the positions of the final segmentation boundaries
+        w = [wn[k] for k in range(combi)]
+        segment_final.append(sum(w) + segment_final[-1])
+        del wn[:combi - 1]
+
         prev = pn[combi - 1][0].numpy()
         i += combi 
 
-    return word
+    return word, segment_final
 
 
 y_pred_list = []
 label_list = []
 
 for path, label in zip(test_img_paths, test_labels_cleaned):
-    cs, label = process_images_labels(path, label)
+    cs, label, image = process_images_labels(path, label)
     label_list.append(label)
 
-    y_pred = ProcessWord(cs)
+    y_pred, segment_final = ProcessWord(cs)
 
     print("The word guessed is :", y_pred)
     print("The actual word is ", label)  
+
+    DrawBoundaries(segment_final, image)
 
     y_pred_list.append(y_pred)  

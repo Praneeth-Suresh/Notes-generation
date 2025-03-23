@@ -388,8 +388,23 @@ def HeightWord(word):
         
     return 128
 
+def DrawVertical(x_position, image):
 
+    height, width = image.shape
+    mask = tf.zeros_like(image)
+    mask = tf.concat([image[:x_position, :], tf.ones([1, width]), image[x_position+1:, :]], axis=0)  # White vertical line
 
+    return mask
+
+def DrawBoundaries(positions, image):
+    LinedImg = DrawVertical(positions[0], image)
+
+    for i in range(1, len(positions)):
+        LinedImg = DrawVertical(positions[i], LinedImg)
+
+    DisplayWord(LinedImg)
+
+    return LinedImg
 
 def CharacterSegmentation(label, image_path, rotate, shear, img_size=(image_width, image_height)):
 
@@ -406,24 +421,6 @@ def CharacterSegmentation(label, image_path, rotate, shear, img_size=(image_widt
     word = ShearImg(word, rotate)
     
     # All this is for the purpose of visualising the points at which the breaks needed to be drawn
-
-    def DrawVertical(x_position, image):
-
-        height, width = image.shape
-        mask = tf.zeros_like(image)
-        mask = tf.concat([image[:x_position, :], tf.ones([1, width]), image[x_position+1:, :]], axis=0)  # White vertical line
-
-        return mask
-
-    def DrawBoundaries(positions, image):
-        LinedImg = DrawVertical(positions[0], image)
-
-        for i in range(1, len(positions)):
-            LinedImg = DrawVertical(positions[i], LinedImg)
-
-        DisplayWord(LinedImg)
-
-        return LinedImg
 
     image = tf.reshape(image, [image.shape[0], image.shape[1]])
 
@@ -595,4 +592,4 @@ def CharacterSegmentation(label, image_path, rotate, shear, img_size=(image_widt
             # characters.append(pad_image(char, 128, 128))
             characters.append(tf.reshape(char, (char.shape[0], char.shape[1]))) # it is not padded because segments will be combined later in the recognition stage
 
-    return characters, label
+    return characters, label, image
